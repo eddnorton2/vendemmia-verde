@@ -2,13 +2,16 @@
   const storageKeys = {
     technicians: "ft_technicians",
     companies: "ft_companies",
-    entries: "ft_entries"
+    entries: "ft_entries",
+    cloudConfig: "vv_cloud_config"
   };
 
   const state = {
     technicians: load(storageKeys.technicians, ["Tecnico 1"]),
     companies: load(storageKeys.companies, []),
     entries: load(storageKeys.entries, []),
+    cloudConfig: load(storageKeys.cloudConfig, { url: "", key: "", bucket: "vendemmia-foto" }),
+    supabase: null,
     photos: [],
     location: null,
     cloudDirectory: null,
@@ -53,7 +56,13 @@
     archiveCount: document.querySelector("#archiveCount"),
     exportCsvBtn: document.querySelector("#exportCsvBtn"),
     exportJsonBtn: document.querySelector("#exportJsonBtn"),
-    clearArchiveBtn: document.querySelector("#clearArchiveBtn")
+    clearArchiveBtn: document.querySelector("#clearArchiveBtn"),
+    cloudSyncForm: document.querySelector("#cloudSyncForm"),
+    supabaseUrl: document.querySelector("#supabaseUrl"),
+    supabaseKey: document.querySelector("#supabaseKey"),
+    supabaseBucket: document.querySelector("#supabaseBucket"),
+    cloudSyncBtn: document.querySelector("#cloudSyncBtn"),
+    cloudSyncStatus: document.querySelector("#cloudSyncStatus")
   };
 
   const titles = {
@@ -71,7 +80,9 @@
     renderTechnicians();
     renderCompanies();
     renderEntries();
+    renderCloudConfig();
     wireEvents();
+    initSupabase();
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("./sw.js").catch(() => {});
@@ -110,6 +121,7 @@
       if (!name || state.technicians.includes(name)) return;
       state.technicians.push(name);
       save(storageKeys.technicians, state.technicians);
+      syncSettingsToCloud();
       els.technicianName.value = "";
       renderTechnicians();
     });
@@ -125,6 +137,8 @@
     els.exportCsvBtn.addEventListener("click", exportCsv);
     els.exportJsonBtn.addEventListener("click", exportJson);
     els.clearArchiveBtn.addEventListener("click", clearArchive);
+    els.cloudSyncForm.addEventListener("submit", saveCloudConfig);
+    els.cloudSyncBtn.addEventListener("click", syncFromCloud);
   }
 
   function switchView(view) {
@@ -169,6 +183,7 @@
         state.technicians = state.technicians.filter((itemName) => itemName !== name);
         if (!state.technicians.length) state.technicians.push("Tecnico 1");
         save(storageKeys.technicians, state.technicians);
+        syncSettingsToCloud();
         renderTechnicians();
       });
       item.append(remove);
@@ -208,6 +223,7 @@
 
     state.companies = companies;
     save(storageKeys.companies, state.companies);
+    syncSettingsToCloud();
     renderCompanies();
   }
 
@@ -327,8 +343,10 @@
       }))
     };
 
+    entry.photos = await uploadPhotosToSupabase(entry);
     state.entries.unshift(entry);
     save(storageKeys.entries, state.entries);
+    await syncEntryToCloud(entry);
     await savePhotosToCloud(entry);
     renderEntries();
     resetForm();
@@ -353,6 +371,122 @@
     const metadataWritable = await metadataHandle.createWritable();
     await metadataWritable.write(JSON.stringify(entry, null, 2));
     await metadataWritable.close();
+  }
+
+  function renderCloudConfig() {
+    els.supabaseUrl.value = state.cloudConfig.url || "";
+    els.supabaseKey.value = state.cloudConfig.key || "";
+    els.supabaseBucket.value = state.cloudConfig.bucket || "vendemmia-foto";
+    renderCloudStatus();
+  }
+
+  function renderCloudStatus(message) {
+    if (message) {
+      els.cloudSyncStatus.textContent = message;
+      return;
+    }
+    els.cloudSyncStatus.textContent = state.supabase
+      ? "Cloud collegato. Gli inserimenti verranno sincronizzati."
+      : "Sincronizzazione cloud non configurata.";
+  }
+
+  async function saveCloudConfig(event) {
+    event.preventDefault();
+    state.cloudConfig = {
+      url: els.supabaseUrl.value.trim(),
+      key: els.supabaseKey.value.trim(),
+      bucket: els.supabaseBucket.value.trim() || "vendemmia-foto"
+    };
+    save(storageKeys.cloudConfig, state.cloudConfig);
+    await initSupabase();
+  }
+
+  async function initSupabase() {
+    if (!state.cloudConfig.url || !state.cloudConfig.key) {
+      state.supabase = null;
+      renderCloudStatus();
+      return;
+    }
+    if (!window.supabase?.createClient) {
+      renderCloudStatus("Libreria cloud non caricata. Controlla la connessione internet.");
+      return;
+    }
+    state.supabase = window.supabase.createClient(state.cloudConfig.url, state.cloudConfig.key);
+    renderCloudStatus("Cloud collegato. Sincronizzazione in corso...");
+    await syncFromCloud();
+  }
+
+  async function syncFromCloud() {
+    if (!state.supabase) {
+      renderCloudStatus("Configura Supabase prima di sincronizzare.");
+      return;
+    }
+    try {
+      const { data: settingsData, error: settingsError } = await state.supabase.from("vv_settings").select("*");
+      if (settingsError) throw settingsError;
+
+      const technicians = settingsData.find((row) => row.id === "technicians")?.payload;
+      const companies = settingsData.find((row) => row.id === "companies")?.payload;
+      if (Array.isArray(technicians) && technicians.length) {
+        state.technicians = technicians;
+        save(storageKeys.technicians, state.technicians);
+        renderTechnicians();
+      }
+      if (Array.isArray(companies)) {
+        state.companies = companies;
+        save(storageKeys.companies, state.companies);
+        renderCompanies();
+      }
+
+      const { data, error } = await state.supabase
+        .from("vv_entries")
+        .select("*")
+        .order("inserted_at", { ascending: false });
+      if (error) throw error;
+
+      const cloudEntries = data.map((row) => row.payload).filter(Boolean);
+      const byId = new Map([...cloudEntries, ...state.entries].map((entry) => [entry.id, entry]));
+      state.entries = Array.from(byId.values()).sort((a, b) => new Date(b.insertedAt) - new Date(a.insertedAt));
+      save(storageKeys.entries, state.entries);
+      renderEntries();
+      await syncSettingsToCloud();
+      renderCloudStatus(`Sincronizzato: ${state.entries.length} inserimenti disponibili.`);
+    } catch (error) {
+      renderCloudStatus(`Errore cloud: ${error.message}`);
+    }
+  }
+
+  async function syncSettingsToCloud() {
+    if (!state.supabase) return;
+    await state.supabase.from("vv_settings").upsert([
+      { id: "technicians", payload: state.technicians, updated_at: new Date().toISOString() },
+      { id: "companies", payload: state.companies, updated_at: new Date().toISOString() }
+    ]);
+  }
+
+  async function syncEntryToCloud(entry) {
+    if (!state.supabase) return;
+    const { error } = await state.supabase.from("vv_entries").upsert({
+      id: entry.id,
+      inserted_at: entry.insertedAt,
+      payload: entry
+    });
+    if (error) renderCloudStatus(`Inserimento salvato solo sul dispositivo: ${error.message}`);
+  }
+
+  async function uploadPhotosToSupabase(entry) {
+    if (!state.supabase || !state.photos.length) return entry.photos;
+    const uploaded = [];
+    for (let index = 0; index < state.photos.length; index += 1) {
+      const photo = state.photos[index];
+      const meta = entry.photos[index];
+      const path = `${sanitizeFileName(entry.cuaa || "senza-cuaa")}/${meta.fileName}`;
+      const { error } = await state.supabase.storage
+        .from(state.cloudConfig.bucket)
+        .upload(path, photo.file, { contentType: photo.type, upsert: true });
+      uploaded.push({ ...meta, cloudPath: error ? "" : path, cloudError: error?.message || "" });
+    }
+    return uploaded;
   }
 
   function renderEntries() {

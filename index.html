@@ -14,7 +14,7 @@
         <div class="brand">
           <span class="brand-mark">FT</span>
           <div>
-          <strong>Vendemmia Verde</strong>
+            <strong>Vendemmia Verde</strong>
             <small>PWA sopralluoghi</small>
           </div>
         </div>
@@ -181,6 +181,30 @@
               </label>
               <div id="companyImportStatus" class="import-status"></div>
             </div>
+
+            <div class="panel">
+              <h2>Sincronizzazione cloud</h2>
+              <p class="hint">Collega Supabase per usare gli stessi dati da PC e smartphone.</p>
+              <form id="cloudSyncForm" class="cloud-form">
+                <label>
+                  Project URL
+                  <input id="supabaseUrl" type="url" placeholder="https://xxxxx.supabase.co" autocomplete="off" />
+                </label>
+                <label>
+                  Anon public key
+                  <input id="supabaseKey" type="password" placeholder="eyJ..." autocomplete="off" />
+                </label>
+                <label>
+                  Bucket foto
+                  <input id="supabaseBucket" type="text" value="vendemmia-foto" autocomplete="off" />
+                </label>
+                <div class="actions compact">
+                  <button class="primary" type="submit">Salva cloud</button>
+                  <button id="cloudSyncBtn" class="secondary" type="button">Sincronizza ora</button>
+                </div>
+              </form>
+              <p class="hint" id="cloudSyncStatus">Sincronizzazione cloud non configurata.</p>
+            </div>
           </div>
         </section>
       </main>
@@ -198,6 +222,7 @@
     </template>
 
     <script src="sicily-comuni.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
   </body>
 </html>
