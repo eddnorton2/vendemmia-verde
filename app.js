@@ -15,16 +15,13 @@
   };
 
   const savedCloudConfig = load(storageKeys.cloudConfig, {});
+  const initialCloudConfig = repairCloudConfig(savedCloudConfig);
 
   const state = {
     technicians: load(storageKeys.technicians, ["Tecnico 1"]),
     companies: load(storageKeys.companies, []),
     entries: load(storageKeys.entries, []),
-    cloudConfig: {
-      url: savedCloudConfig.url || defaultCloudConfig.url,
-      key: savedCloudConfig.key || defaultCloudConfig.key,
-      bucket: savedCloudConfig.bucket || defaultCloudConfig.bucket
-    },
+    cloudConfig: initialCloudConfig,
     megaConfig: load(storageKeys.megaConfig, { email: "", password: "", folder: "Vendemmia Verde", remember: false }),
     supabase: null,
     megaStorage: null,
@@ -80,6 +77,7 @@
     supabaseKey: document.querySelector("#supabaseKey"),
     supabaseBucket: document.querySelector("#supabaseBucket"),
     cloudSyncBtn: document.querySelector("#cloudSyncBtn"),
+    cloudDefaultsBtn: document.querySelector("#cloudDefaultsBtn"),
     cloudSyncStatus: document.querySelector("#cloudSyncStatus"),
     megaForm: document.querySelector("#megaForm"),
     megaEmail: document.querySelector("#megaEmail"),
@@ -169,6 +167,7 @@
     els.clearArchiveBtn.addEventListener("click", clearArchive);
     els.cloudSyncForm.addEventListener("submit", saveCloudConfig);
     els.cloudSyncBtn.addEventListener("click", syncFromCloud);
+    els.cloudDefaultsBtn.addEventListener("click", restoreCloudDefaults);
     els.megaForm.addEventListener("submit", connectMega);
     els.megaDisconnectBtn.addEventListener("click", disconnectMega);
   }
@@ -417,6 +416,8 @@
   }
 
   function renderCloudConfig() {
+    state.cloudConfig = repairCloudConfig(state.cloudConfig);
+    save(storageKeys.cloudConfig, state.cloudConfig);
     els.supabaseUrl.value = state.cloudConfig.url || "";
     els.supabaseKey.value = state.cloudConfig.key || "";
     els.supabaseBucket.value = state.cloudConfig.bucket || "vendemmia-foto";
@@ -441,6 +442,13 @@
       bucket: els.supabaseBucket.value.trim() || "vendemmia-foto"
     };
     save(storageKeys.cloudConfig, state.cloudConfig);
+    await initSupabase();
+  }
+
+  async function restoreCloudDefaults() {
+    state.cloudConfig = { ...defaultCloudConfig };
+    save(storageKeys.cloudConfig, state.cloudConfig);
+    renderCloudConfig();
     await initSupabase();
   }
 
@@ -790,6 +798,17 @@
     } catch {
       return trimmed.replace(/\/+$/, "");
     }
+  }
+
+  function repairCloudConfig(config) {
+    const url = normalizeSupabaseUrl(config?.url || "");
+    const key = String(config?.key || "").trim();
+    const bucket = String(config?.bucket || "").trim();
+    return {
+      url: /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(url) ? url : defaultCloudConfig.url,
+      key: key.startsWith("eyJ") ? key : defaultCloudConfig.key,
+      bucket: bucket || defaultCloudConfig.bucket
+    };
   }
 
   function fileToDataUrl(file) {

@@ -189,11 +189,11 @@
               <form id="cloudSyncForm" class="cloud-form">
                 <label>
                   Project URL
-                  <input id="supabaseUrl" type="url" placeholder="https://xxxxx.supabase.co" autocomplete="off" />
+                  <input id="supabaseUrl" type="url" value="https://jxjgsuhrevewhtrahjbq.supabase.co" placeholder="https://xxxxx.supabase.co" autocomplete="off" />
                 </label>
                 <label>
                   Anon public key
-                  <input id="supabaseKey" type="password" placeholder="eyJ..." autocomplete="off" />
+                  <input id="supabaseKey" type="password" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4amdzdWhyZXZld2h0cmFoamJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MTk0MTIsImV4cCI6MjA5NDA5NTQxMn0.XcLgLycpZ7mXzmRj_s-Qp4Au1wOqrjaZyLjy4JPzT6o" placeholder="eyJ..." autocomplete="off" />
                 </label>
                 <label>
                   Bucket foto
@@ -202,6 +202,7 @@
                 <div class="actions compact">
                   <button class="primary" type="submit">Salva cloud</button>
                   <button id="cloudSyncBtn" class="secondary" type="button">Sincronizza ora</button>
+                  <button id="cloudDefaultsBtn" class="ghost" type="button">Ripristina default</button>
                 </div>
               </form>
               <p class="hint" id="cloudSyncStatus">Sincronizzazione cloud non configurata.</p>
