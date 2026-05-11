@@ -1,4 +1,4 @@
-const CACHE_NAME = "vendemmia-verde-v4";
+const CACHE_NAME = "vendemmia-verde-v6";
 const ASSETS = [
   "./",
   "./index.html",

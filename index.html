@@ -109,6 +109,7 @@
                   <input id="galleryInput" type="file" accept="image/*" multiple />
                 </label>
                 <button id="chooseCloudBtn" class="secondary" type="button">Scegli cartella cloud</button>
+                <button id="openCloudFolderBtn" class="secondary" type="button">Apri cartella MEGA</button>
               </div>
               <p class="hint" id="locationStatus">Posizione non ancora rilevata.</p>
               <p class="hint" id="cloudStatus">Nessuna cartella cloud selezionata.</p>
@@ -204,6 +205,38 @@
                 </div>
               </form>
               <p class="hint" id="cloudSyncStatus">Sincronizzazione cloud non configurata.</p>
+            </div>
+
+            <div class="panel">
+              <h2>Account MEGA</h2>
+              <p class="hint">Collega un account MEGA per caricare automaticamente le foto nella cartella indicata.</p>
+              <form id="megaForm" class="cloud-form">
+                <label>
+                  Email MEGA
+                  <input id="megaEmail" type="email" autocomplete="username" />
+                </label>
+                <label>
+                  Password MEGA
+                  <input id="megaPassword" type="password" autocomplete="current-password" />
+                </label>
+                <label>
+                  Codice 2FA
+                  <input id="megaTwoFactor" type="text" inputmode="numeric" placeholder="Solo se attivo" autocomplete="one-time-code" />
+                </label>
+                <label>
+                  Cartella destinazione
+                  <input id="megaFolder" type="text" value="Vendemmia Verde" autocomplete="off" />
+                </label>
+                <label class="checkbox-line">
+                  <input id="megaRemember" type="checkbox" />
+                  Ricorda su questo dispositivo
+                </label>
+                <div class="actions compact">
+                  <button class="primary" type="submit">Collega MEGA</button>
+                  <button id="megaDisconnectBtn" class="ghost danger" type="button">Scollega</button>
+                </div>
+              </form>
+              <p class="hint" id="megaStatus">MEGA non collegato.</p>
             </div>
           </div>
         </section>

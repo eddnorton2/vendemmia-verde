@@ -4,12 +4,14 @@
     key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4amdzdWhyZXZld2h0cmFoamJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MTk0MTIsImV4cCI6MjA5NDA5NTQxMn0.XcLgLycpZ7mXzmRj_s-Qp4Au1wOqrjaZyLjy4JPzT6o",
     bucket: "vendemmia-foto"
   };
+  const defaultCloudFolderUrl = "https://mega.nz/folder/oFRwxI7Q#F_yub12kb4HtAzJJcsLTDg";
 
   const storageKeys = {
     technicians: "ft_technicians",
     companies: "ft_companies",
     entries: "ft_entries",
-    cloudConfig: "vv_cloud_config"
+    cloudConfig: "vv_cloud_config",
+    megaConfig: "vv_mega_config"
   };
 
   const state = {
@@ -17,7 +19,10 @@
     companies: load(storageKeys.companies, []),
     entries: load(storageKeys.entries, []),
     cloudConfig: { ...defaultCloudConfig, ...load(storageKeys.cloudConfig, defaultCloudConfig) },
+    megaConfig: load(storageKeys.megaConfig, { email: "", password: "", folder: "Vendemmia Verde", remember: false }),
     supabase: null,
+    megaStorage: null,
+    megaModule: null,
     photos: [],
     location: null,
     cloudDirectory: null,
@@ -55,6 +60,7 @@
     getLocationBtn: document.querySelector("#getLocationBtn"),
     locationStatus: document.querySelector("#locationStatus"),
     chooseCloudBtn: document.querySelector("#chooseCloudBtn"),
+    openCloudFolderBtn: document.querySelector("#openCloudFolderBtn"),
     cloudStatus: document.querySelector("#cloudStatus"),
     entryForm: document.querySelector("#entryForm"),
     resetBtn: document.querySelector("#resetBtn"),
@@ -68,7 +74,15 @@
     supabaseKey: document.querySelector("#supabaseKey"),
     supabaseBucket: document.querySelector("#supabaseBucket"),
     cloudSyncBtn: document.querySelector("#cloudSyncBtn"),
-    cloudSyncStatus: document.querySelector("#cloudSyncStatus")
+    cloudSyncStatus: document.querySelector("#cloudSyncStatus"),
+    megaForm: document.querySelector("#megaForm"),
+    megaEmail: document.querySelector("#megaEmail"),
+    megaPassword: document.querySelector("#megaPassword"),
+    megaTwoFactor: document.querySelector("#megaTwoFactor"),
+    megaFolder: document.querySelector("#megaFolder"),
+    megaRemember: document.querySelector("#megaRemember"),
+    megaDisconnectBtn: document.querySelector("#megaDisconnectBtn"),
+    megaStatus: document.querySelector("#megaStatus")
   };
 
   const titles = {
@@ -87,8 +101,11 @@
     renderCompanies();
     renderEntries();
     renderCloudConfig();
+    renderMegaConfig();
+    renderPhotoCloudStatus();
     wireEvents();
     initSupabase();
+    initMegaFromSavedConfig();
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("./sw.js").catch(() => {});
@@ -138,6 +155,7 @@
     els.galleryInput.addEventListener("change", handlePhotoInput);
     els.getLocationBtn.addEventListener("click", getLocation);
     els.chooseCloudBtn.addEventListener("click", chooseCloudDirectory);
+    els.openCloudFolderBtn.addEventListener("click", openDefaultCloudFolder);
     els.entryForm.addEventListener("submit", saveEntry);
     els.resetBtn.addEventListener("click", resetForm);
     els.exportCsvBtn.addEventListener("click", exportCsv);
@@ -145,6 +163,8 @@
     els.clearArchiveBtn.addEventListener("click", clearArchive);
     els.cloudSyncForm.addEventListener("submit", saveCloudConfig);
     els.cloudSyncBtn.addEventListener("click", syncFromCloud);
+    els.megaForm.addEventListener("submit", connectMega);
+    els.megaDisconnectBtn.addEventListener("click", disconnectMega);
   }
 
   function switchView(view) {
@@ -322,6 +342,16 @@
     }
   }
 
+  function openDefaultCloudFolder() {
+    window.open(defaultCloudFolderUrl, "_blank", "noopener");
+  }
+
+  function renderPhotoCloudStatus() {
+    els.cloudStatus.textContent = state.megaStorage
+      ? "MEGA collegato: le foto verranno caricate automaticamente nella cartella configurata."
+      : "Cartella cloud predefinita: MEGA. Collega l'account MEGA nelle Impostazioni per caricare automaticamente le foto.";
+  }
+
   async function saveEntry(event) {
     event.preventDefault();
     const formData = new FormData(els.entryForm);
@@ -350,6 +380,7 @@
     };
 
     entry.photos = await uploadPhotosToSupabase(entry);
+    entry.photos = await uploadPhotosToMega(entry);
     state.entries.unshift(entry);
     save(storageKeys.entries, state.entries);
     await syncEntryToCloud(entry);
@@ -500,6 +531,130 @@
     return uploaded;
   }
 
+  function renderMegaConfig() {
+    els.megaEmail.value = state.megaConfig.email || "";
+    els.megaPassword.value = state.megaConfig.remember ? state.megaConfig.password || "" : "";
+    els.megaFolder.value = state.megaConfig.folder || "Vendemmia Verde";
+    els.megaRemember.checked = Boolean(state.megaConfig.remember);
+    renderMegaStatus();
+  }
+
+  function renderMegaStatus(message) {
+    if (message) {
+      els.megaStatus.textContent = message;
+      return;
+    }
+    els.megaStatus.textContent = state.megaStorage
+      ? `MEGA collegato. Cartella: ${state.megaConfig.folder || "Vendemmia Verde"}`
+      : "MEGA non collegato.";
+  }
+
+  async function initMegaFromSavedConfig() {
+    if (!state.megaConfig.email || !state.megaConfig.password) return;
+    await loginMega({
+      email: state.megaConfig.email,
+      password: state.megaConfig.password,
+      secondFactorCode: "",
+      folder: state.megaConfig.folder || "Vendemmia Verde",
+      remember: state.megaConfig.remember
+    });
+  }
+
+  async function connectMega(event) {
+    event.preventDefault();
+    await loginMega({
+      email: els.megaEmail.value.trim(),
+      password: els.megaPassword.value,
+      secondFactorCode: els.megaTwoFactor.value.trim(),
+      folder: els.megaFolder.value.trim() || "Vendemmia Verde",
+      remember: els.megaRemember.checked
+    });
+  }
+
+  async function loginMega(config) {
+    if (!config.email || !config.password) {
+      renderMegaStatus("Inserisci email e password MEGA.");
+      return;
+    }
+    try {
+      renderMegaStatus("Collegamento a MEGA in corso...");
+      if (!state.megaModule) {
+        state.megaModule = await import("https://unpkg.com/megajs/dist/main.browser-es.mjs");
+      }
+      const options = {
+        email: config.email,
+        password: config.password,
+        keepalive: false,
+        autologin: true
+      };
+      if (config.secondFactorCode) options.secondFactorCode = config.secondFactorCode;
+      state.megaStorage = await new state.megaModule.Storage(options).ready;
+      state.megaConfig = {
+        email: config.remember ? config.email : "",
+        password: config.remember ? config.password : "",
+        folder: config.folder,
+        remember: config.remember
+      };
+      save(storageKeys.megaConfig, state.megaConfig);
+      renderMegaConfig();
+      renderMegaStatus(`MEGA collegato. Cartella: ${config.folder}`);
+      renderPhotoCloudStatus();
+      els.megaTwoFactor.value = "";
+    } catch (error) {
+      state.megaStorage = null;
+      renderMegaStatus(`Errore MEGA: ${error.message}`);
+    }
+  }
+
+  function disconnectMega() {
+    state.megaStorage = null;
+    state.megaConfig = { email: "", password: "", folder: "Vendemmia Verde", remember: false };
+    save(storageKeys.megaConfig, state.megaConfig);
+    renderMegaConfig();
+    renderPhotoCloudStatus();
+  }
+
+  async function uploadPhotosToMega(entry) {
+    if (!state.megaStorage || !state.photos.length) return entry.photos;
+    try {
+      const baseFolder = await ensureMegaFolder(state.megaStorage.root, state.megaConfig.folder || "Vendemmia Verde");
+      const cuaaFolder = await ensureMegaFolder(baseFolder, sanitizeFileName(entry.cuaa || "senza-cuaa"));
+      const uploaded = [];
+      for (let index = 0; index < state.photos.length; index += 1) {
+        const photo = state.photos[index];
+        const meta = entry.photos[index];
+        const content = new Uint8Array(await photo.file.arrayBuffer());
+        await cuaaFolder.upload({ name: meta.fileName, size: photo.file.size }, content).complete;
+        uploaded.push({ ...meta, megaFolder: `${state.megaConfig.folder}/${entry.cuaa}`, megaUploaded: true });
+      }
+
+      const metadataName = `${sanitizeFileName(entry.cuaa || "senza-cuaa")}_metadati.json`;
+      const metadata = new TextEncoder().encode(JSON.stringify({ ...entry, photos: uploaded }, null, 2));
+      await cuaaFolder.upload({ name: metadataName, size: metadata.byteLength }, metadata).complete;
+      renderMegaStatus(`Foto caricate su MEGA: ${uploaded.length}`);
+      return uploaded;
+    } catch (error) {
+      renderMegaStatus(`Upload MEGA non riuscito: ${error.message}`);
+      return entry.photos.map((photo) => ({ ...photo, megaUploaded: false, megaError: error.message }));
+    }
+  }
+
+  async function ensureMegaFolder(parent, path) {
+    const parts = String(path || "")
+      .split("/")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    let current = parent;
+    for (const part of parts) {
+      let next = current.children?.find((child) => child.directory && child.name === part);
+      if (!next) {
+        next = await current.mkdir(part);
+      }
+      current = next;
+    }
+    return current;
+  }
+
   function renderEntries() {
     els.entriesTable.innerHTML = "";
     els.archiveCount.textContent = state.entries.length === 1 ? "1 inserimento salvato" : `${state.entries.length} inserimenti salvati`;
@@ -532,6 +687,7 @@
     state.photos = [];
     state.location = null;
     els.locationStatus.textContent = "Posizione non ancora rilevata.";
+    renderPhotoCloudStatus();
     renderPhotos();
   }
 

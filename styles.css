@@ -354,6 +354,16 @@ th {
   justify-content: flex-start;
 }
 
+.checkbox-line {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  font-weight: 600;
+}
+
+.checkbox-line input {
+  width: auto;
+}
+
 .list {
   display: grid;
   gap: 8px;
