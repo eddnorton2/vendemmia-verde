@@ -14,11 +14,17 @@
     megaConfig: "vv_mega_config"
   };
 
+  const savedCloudConfig = load(storageKeys.cloudConfig, {});
+
   const state = {
     technicians: load(storageKeys.technicians, ["Tecnico 1"]),
     companies: load(storageKeys.companies, []),
     entries: load(storageKeys.entries, []),
-    cloudConfig: { ...defaultCloudConfig, ...load(storageKeys.cloudConfig, defaultCloudConfig) },
+    cloudConfig: {
+      url: savedCloudConfig.url || defaultCloudConfig.url,
+      key: savedCloudConfig.key || defaultCloudConfig.key,
+      bucket: savedCloudConfig.bucket || defaultCloudConfig.bucket
+    },
     megaConfig: load(storageKeys.megaConfig, { email: "", password: "", folder: "Vendemmia Verde", remember: false }),
     supabase: null,
     megaStorage: null,
