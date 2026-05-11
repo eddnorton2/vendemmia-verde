@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1f6f5b" />
+    <title>Vendemmia Verde</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">FT</span>
+          <div>
+          <strong>Vendemmia Verde</strong>
+            <small>PWA sopralluoghi</small>
+          </div>
+        </div>
+        <nav class="nav" aria-label="Sezioni">
+          <button class="nav-button active" data-view="workflow" type="button">Lavoro</button>
+          <button class="nav-button" data-view="archive" type="button">Archivio</button>
+          <button class="nav-button" data-view="settings" type="button">Impostazioni</button>
+        </nav>
+        <div class="status-card">
+          <span id="installStatus">Pronta per l'uso</span>
+          <button id="installBtn" class="ghost hidden" type="button">Installa</button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <section class="topbar">
+          <div>
+            <h1 id="viewTitle">Nuovo inserimento</h1>
+            <p id="viewSubtitle">Scegli tecnico, azienda, dati catastali, esito e foto geolocalizzate.</p>
+          </div>
+          <div class="clock" id="clock"></div>
+        </section>
+
+        <section id="workflow" class="view active" aria-labelledby="viewTitle">
+          <form id="entryForm" class="panel">
+            <div class="form-grid">
+              <label>
+                Tecnico
+                <select id="technician" required></select>
+              </label>
+
+              <label>
+                Cerca azienda per CUAA o nome
+                <input id="companySearch" type="search" list="companiesList" placeholder="Digita CUAA o denominazione" autocomplete="off" />
+                <datalist id="companiesList"></datalist>
+              </label>
+
+              <label>
+                CUAA
+                <input id="cuaa" type="text" autocomplete="off" required />
+              </label>
+
+              <label>
+                Denominazione azienda
+                <input id="companyName" type="text" autocomplete="off" required />
+              </label>
+
+              <label>
+                Provincia
+                <input id="province" type="text" maxlength="2" autocomplete="off" />
+              </label>
+
+              <label>
+                Comune
+                <input id="municipality" type="text" list="municipalitiesList" autocomplete="off" required />
+                <datalist id="municipalitiesList"></datalist>
+              </label>
+
+              <label>
+                Foglio
+                <input id="sheet" type="text" inputmode="numeric" autocomplete="off" required />
+              </label>
+
+              <label>
+                Particella
+                <input id="parcel" type="text" autocomplete="off" required />
+              </label>
+
+              <fieldset class="result-field">
+                <legend>Esito</legend>
+                <label class="radio"><input type="radio" name="outcome" value="KO" required /> KO</label>
+                <label class="radio"><input type="radio" name="outcome" value="VV Parziale" required /> VV Parziale</label>
+              </fieldset>
+            </div>
+
+            <section class="photos">
+              <div class="section-heading">
+                <div>
+                  <h2>Foto</h2>
+                  <p>Acquisisci o carica immagini. L'app registra posizione, data e ora.</p>
+                </div>
+                <button id="getLocationBtn" class="secondary" type="button">Rileva posizione</button>
+              </div>
+
+              <div class="photo-actions">
+                <label class="file-button">
+                  Scatta foto
+                  <input id="cameraInput" type="file" accept="image/*" capture="environment" multiple />
+                </label>
+                <label class="file-button">
+                  Carica foto
+                  <input id="galleryInput" type="file" accept="image/*" multiple />
+                </label>
+                <button id="chooseCloudBtn" class="secondary" type="button">Scegli cartella cloud</button>
+              </div>
+              <p class="hint" id="locationStatus">Posizione non ancora rilevata.</p>
+              <p class="hint" id="cloudStatus">Nessuna cartella cloud selezionata.</p>
+              <div id="photoPreview" class="photo-grid" aria-live="polite"></div>
+            </section>
+
+            <label class="notes">
+              Note
+              <textarea id="notes" rows="3" placeholder="Annotazioni facoltative"></textarea>
+            </label>
+
+            <div class="actions">
+              <button class="primary" type="submit">Salva inserimento</button>
+              <button id="resetBtn" class="ghost" type="button">Pulisci</button>
+            </div>
+          </form>
+        </section>
+
+        <section id="archive" class="view">
+          <div class="panel">
+            <div class="section-heading">
+              <div>
+                <h2>Archivio inserimenti</h2>
+                <p id="archiveCount">0 inserimenti salvati</p>
+              </div>
+              <div class="toolbar">
+                <button id="exportCsvBtn" class="secondary" type="button">Esporta CSV</button>
+                <button id="exportJsonBtn" class="secondary" type="button">Esporta JSON</button>
+                <button id="clearArchiveBtn" class="ghost danger" type="button">Svuota archivio</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Tecnico</th>
+                    <th>CUAA</th>
+                    <th>Azienda</th>
+                    <th>Comune</th>
+                    <th>Foglio</th>
+                    <th>Particella</th>
+                    <th>Esito</th>
+                    <th>Foto</th>
+                  </tr>
+                </thead>
+                <tbody id="entriesTable"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="settings" class="view">
+          <div class="settings-grid">
+            <div class="panel">
+              <h2>Tecnici</h2>
+              <form id="technicianForm" class="inline-form">
+                <input id="technicianName" type="text" placeholder="Nome tecnico" autocomplete="off" required />
+                <button class="primary" type="submit">Aggiungi</button>
+              </form>
+              <div id="techniciansList" class="list"></div>
+            </div>
+
+            <div class="panel">
+              <h2>Aziende da CSV</h2>
+              <p class="hint">Carica un file con colonne: CUAA, Denominazione azienda, Provincia.</p>
+              <label class="file-button wide">
+                Importa CSV
+                <input id="csvInput" type="file" accept=".csv,text/csv" />
+              </label>
+              <div id="companyImportStatus" class="import-status"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="photoTemplate">
+      <article class="photo-card">
+        <img alt="" />
+        <div>
+          <strong></strong>
+          <small></small>
+        </div>
+        <button type="button" aria-label="Rimuovi foto">Rimuovi</button>
+      </article>
+    </template>
+
+    <script src="sicily-comuni.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
