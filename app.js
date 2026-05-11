@@ -276,15 +276,21 @@
     if (!state.location) {
       await getLocation();
     }
+    if (!state.location) {
+      els.locationStatus.textContent = "Serve la posizione per creare JPEG con EXIF georiferiti.";
+      event.target.value = "";
+      return;
+    }
     const capturedAt = new Date().toISOString();
     for (const file of files) {
-      const dataUrl = await fileToDataUrl(file);
+      const geotagged = await createGeotaggedJpeg(file, state.location, capturedAt);
       state.photos.push({
         id: crypto.randomUUID(),
-        file,
-        dataUrl,
+        file: geotagged.file,
+        dataUrl: geotagged.dataUrl,
         originalName: file.name || "foto.jpg",
-        type: file.type || "image/jpeg",
+        type: "image/jpeg",
+        exifGeotagged: geotagged.exifGeotagged,
         capturedAt,
         location: state.location
       });
@@ -379,6 +385,7 @@
         fileName: photoFileName(cuaa, index, photo.type),
         originalName: photo.originalName,
         type: photo.type,
+        exifGeotagged: photo.exifGeotagged,
         capturedAt: photo.capturedAt,
         location: photo.location
       }))
@@ -820,10 +827,116 @@
     });
   }
 
+  async function createGeotaggedJpeg(file, location, capturedAt) {
+    const jpegDataUrl = await imageFileToJpegDataUrl(file);
+    if (!window.piexif) {
+      return {
+        file: dataUrlToFile(jpegDataUrl, forceJpegName(file.name), "image/jpeg"),
+        dataUrl: jpegDataUrl,
+        exifGeotagged: false
+      };
+    }
+
+    try {
+      const exif = piexif.load(jpegDataUrl);
+      exif["0th"] = exif["0th"] || {};
+      exif.Exif = exif.Exif || {};
+      exif.GPS = exif.GPS || {};
+      exif["0th"][piexif.ImageIFD.Software] = "Vendemmia Verde";
+      exif.Exif[piexif.ExifIFD.DateTimeOriginal] = exifDateTime(capturedAt);
+      exif.Exif[piexif.ExifIFD.DateTimeDigitized] = exifDateTime(capturedAt);
+      exif.GPS[piexif.GPSIFD.GPSVersionID] = [2, 3, 0, 0];
+      exif.GPS[piexif.GPSIFD.GPSLatitudeRef] = location.latitude >= 0 ? "N" : "S";
+      exif.GPS[piexif.GPSIFD.GPSLatitude] = decimalToDmsRational(location.latitude);
+      exif.GPS[piexif.GPSIFD.GPSLongitudeRef] = location.longitude >= 0 ? "E" : "W";
+      exif.GPS[piexif.GPSIFD.GPSLongitude] = decimalToDmsRational(location.longitude);
+      exif.GPS[piexif.GPSIFD.GPSMapDatum] = "WGS-84";
+      exif.GPS[piexif.GPSIFD.GPSDateStamp] = exifDateStamp(capturedAt);
+      exif.GPS[piexif.GPSIFD.GPSTimeStamp] = exifTimeStamp(capturedAt);
+      if (Number.isFinite(location.accuracy)) {
+        exif.GPS[piexif.GPSIFD.GPSDOP] = [Math.round(location.accuracy * 100), 100];
+      }
+      const exifBytes = piexif.dump(exif);
+      const geotaggedDataUrl = piexif.insert(exifBytes, jpegDataUrl);
+      return {
+        file: dataUrlToFile(geotaggedDataUrl, forceJpegName(file.name), "image/jpeg"),
+        dataUrl: geotaggedDataUrl,
+        exifGeotagged: true
+      };
+    } catch {
+      return {
+        file: dataUrlToFile(jpegDataUrl, forceJpegName(file.name), "image/jpeg"),
+        dataUrl: jpegDataUrl,
+        exifGeotagged: false
+      };
+    }
+  }
+
+  function imageFileToJpegDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth || image.width;
+        canvas.height = image.naturalHeight || image.height;
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0);
+        URL.revokeObjectURL(objectUrl);
+        resolve(canvas.toDataURL("image/jpeg", 0.92));
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Immagine non leggibile"));
+      };
+      image.src = objectUrl;
+    });
+  }
+
+  function dataUrlToFile(dataUrl, name, type) {
+    const parts = dataUrl.split(",");
+    const binary = atob(parts[1]);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new File([bytes], name, { type, lastModified: Date.now() });
+  }
+
+  function forceJpegName(name) {
+    const cleanName = sanitizeFileName(String(name || "foto").replace(/\.[^.]+$/, ""));
+    return `${cleanName || "foto"}.jpg`;
+  }
+
+  function decimalToDmsRational(value) {
+    const absolute = Math.abs(value);
+    const degrees = Math.floor(absolute);
+    const minutesFloat = (absolute - degrees) * 60;
+    const minutes = Math.floor(minutesFloat);
+    const seconds = Math.round((minutesFloat - minutes) * 60 * 10000);
+    return [[degrees, 1], [minutes, 1], [seconds, 10000]];
+  }
+
+  function exifDateTime(value) {
+    const date = new Date(value);
+    const pad = (number) => String(number).padStart(2, "0");
+    return `${date.getFullYear()}:${pad(date.getMonth() + 1)}:${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
+  function exifDateStamp(value) {
+    const date = new Date(value);
+    const pad = (number) => String(number).padStart(2, "0");
+    return `${date.getUTCFullYear()}:${pad(date.getUTCMonth() + 1)}:${pad(date.getUTCDate())}`;
+  }
+
+  function exifTimeStamp(value) {
+    const date = new Date(value);
+    return [[date.getUTCHours(), 1], [date.getUTCMinutes(), 1], [date.getUTCSeconds(), 1]];
+  }
+
   function photoFileName(cuaa, index, type) {
-    const extension = type.includes("png") ? "png" : type.includes("webp") ? "webp" : "jpg";
     const suffix = String(index + 1).padStart(2, "0");
-    return `${sanitizeFileName(cuaa || "senza-cuaa")}_${suffix}.${extension}`;
+    return `${sanitizeFileName(cuaa || "senza-cuaa")}_${suffix}.jpg`;
   }
 
   function sanitizeFileName(value) {
