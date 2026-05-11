@@ -393,7 +393,7 @@
   async function saveCloudConfig(event) {
     event.preventDefault();
     state.cloudConfig = {
-      url: els.supabaseUrl.value.trim(),
+      url: normalizeSupabaseUrl(els.supabaseUrl.value),
       key: els.supabaseKey.value.trim(),
       bucket: els.supabaseBucket.value.trim() || "vendemmia-foto"
     };
@@ -405,6 +405,11 @@
     if (!state.cloudConfig.url || !state.cloudConfig.key) {
       state.supabase = null;
       renderCloudStatus();
+      return;
+    }
+    if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(state.cloudConfig.url)) {
+      state.supabase = null;
+      renderCloudStatus("Project URL non valido. Usa solo il formato https://xxxxx.supabase.co");
       return;
     }
     if (!window.supabase?.createClient) {
@@ -606,6 +611,17 @@
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .trim();
+  }
+
+  function normalizeSupabaseUrl(value) {
+    const trimmed = String(value || "").trim();
+    if (!trimmed) return "";
+    try {
+      const url = new URL(trimmed);
+      return `${url.protocol}//${url.host}`.replace(/\/$/, "");
+    } catch {
+      return trimmed.replace(/\/+$/, "");
+    }
   }
 
   function fileToDataUrl(file) {
