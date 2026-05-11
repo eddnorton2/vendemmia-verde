@@ -1,4 +1,10 @@
 (function () {
+  const defaultCloudConfig = {
+    url: "https://jxjgsuhrevewhtrahjbq.supabase.co",
+    key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4amdzdWhyZXZld2h0cmFoamJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MTk0MTIsImV4cCI6MjA5NDA5NTQxMn0.XcLgLycpZ7mXzmRj_s-Qp4Au1wOqrjaZyLjy4JPzT6o",
+    bucket: "vendemmia-foto"
+  };
+
   const storageKeys = {
     technicians: "ft_technicians",
     companies: "ft_companies",
@@ -10,7 +16,7 @@
     technicians: load(storageKeys.technicians, ["Tecnico 1"]),
     companies: load(storageKeys.companies, []),
     entries: load(storageKeys.entries, []),
-    cloudConfig: load(storageKeys.cloudConfig, { url: "", key: "", bucket: "vendemmia-foto" }),
+    cloudConfig: { ...defaultCloudConfig, ...load(storageKeys.cloudConfig, defaultCloudConfig) },
     supabase: null,
     photos: [],
     location: null,
